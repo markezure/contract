@@ -1,1 +1,151 @@
+pragma solidity ^0.4.16;    // Versão Compilador v0.4.16+commit.d7661dd9 - Runs (Optimiser):200 - Optimization Enabled:	No
 
+interface tokenRecipient { 
+    function receiveApproval(address _from, uint256 _value, address _token, bytes _extraData) public;
+}
+
+contract Winco {
+    // Variables publicas del token
+    string public name;
+    string public symbol;
+    uint8 public decimals = 8;
+    
+    uint256 public totalSupply;
+
+    // Esto crea una matriz con todos los saldos
+    mapping (address => uint256) public balanceOf;
+    mapping (address => mapping (address => uint256)) public allowance;
+
+    // Esto genera un evento publico en la blockchain que va a notificar los clients 
+    event Transfer(address indexed from, address indexed to, uint256 value);
+
+    // Esto notifica clientes sobre la cantidad quemada
+    event Burn(address indexed from, uint256 value);
+
+    function Winco(
+
+) public {
+        totalSupply = 7652580800 * 10 ** 8;  // 
+        balanceOf[msg.sender] = totalSupply;                
+        name = "Winco";                                  
+        symbol = "WCO";                               
+    }
+
+
+    /**
+     * Transferencia interna, solo puede ser llamada por este contracto
+     */
+    function _transfer(address _from, address _to, uint _value) internal {
+        // Previnir transferencia para dirección 0x0. Utilice burn().
+        require(_to != 0x0);
+        // Verificar si el remitente tiene suficiente
+        require(balanceOf[_from] >= _value);
+        // Verificar desbordes
+        require(balanceOf[_to] + _value > balanceOf[_to]);
+        // Salve eso para una aserción en el futuro
+        uint previousBalances = balanceOf[_from] + balanceOf[_to];
+        // Subtrair del remitente
+        balanceOf[_from] -= _value;
+        // Add el mismo para el recipiente
+        balanceOf[_to] += _value;
+        Transfer(_from, _to, _value);
+        // Aserciones son utilizadas para el uso de analisis para encontrar bugs en el código. No debem fallar nunca
+        assert(balanceOf[_from] + balanceOf[_to] == previousBalances);
+    }
+
+    /**
+     * Transferir tokens
+     *
+     * Enviar `_value`tokens para `_to` de su cuenta
+     *
+     * @param _to La dirección del recipiente
+     * @param _value la cantidad para enviar
+     */
+    function transfer(address _to, uint256 _value) public {
+        _transfer(msg.sender, _to, _value);
+    }
+
+    /**
+     * Transferir tokens de otra dirección
+     *
+     * Enviar `_value` tokens para `_to` en nombre de `_from`
+     *
+     * @param _from La dirección del remitente
+     * @param _to La dirección del recipiente
+     * @param _value la cantidad para envío
+     */
+    function transferFrom(address _from, address _to, uint256 _value) public returns (bool success) {
+        require(_value <= allowance[_from][msg.sender]);     // Verificar permisión
+        allowance[_from][msg.sender] -= _value;
+        _transfer(_from, _to, _value);
+        return true;
+    }
+
+    /**
+     * Definir permisión para otra dirección 
+     *
+     * Permite que `_spender` no gaste más que `_value` tokens en su nombre
+     *
+     * @param _spender La dirección autorizada para gastar
+     * @@param _value la cantidad máxima que pueden gastar
+     */
+    function approve(address _spender, uint256 _value) public
+    returns (bool success) {
+        allowance[msg.sender][_spender] = _value;
+        return true;
+    }
+
+    /**
+     * Define permisión para otra dirección y notifica
+     *
+     * Permite que `_spender` no gaste más que `_value` tokens en su nombre, y luego hace ping en el contracto sobre eso
+     *
+     * @param _spender La dirección autorizada para gastar
+     * @param _value la cantidad máxima que pueden gastar
+     * @param _extraData algunas informaciones extras para enviar para el contracto aprovado
+     */
+    function approveAndCall(address _spender, uint256 _value, bytes _extraData)
+    public
+    returns (bool success) {
+        tokenRecipient spender = tokenRecipient(_spender);
+        if (approve(_spender, _value)) {
+            spender.receiveApproval(msg.sender, _value, this, _extraData);
+            return true;
+        }
+    }
+
+
+    /**
+     * Destruir tokens
+     *
+     * Retira `_value` tokens del sistema irreversiblemente
+     *
+     * @param _value la cantidad de dinero para quemar
+     */
+    function burn(uint256 _value) public returns (bool success) {
+        require(balanceOf[msg.sender] >= _value);   // Verificar si el remitente tiene suficiente
+        balanceOf[msg.sender] -= _value;            // Subtraer del remitente
+        totalSupply -= _value;                      // Actualizar totalSuply
+        Burn(msg.sender, _value);
+        return true;
+    }
+
+
+    /**
+     * Destruir tokens de otra cuenta
+     *
+     * Retira `_value` tokens del sistema irreversiblemente en nombre de `_from`.
+     *
+     * @param _from la dirección del remitente
+     * @param _value la cantidad de dinero para quemar
+     */
+    function burnFrom(address _from, uint256 _value) public returns (bool success) {
+        require(balanceOf[_from] >= _value);                // Verificar si el saldo del alvo es suficiente
+        require(_value <= allowance[_from][msg.sender]);    // Verificar permisión
+        balanceOf[_from] -= _value;                         // Subtraer del saldo apuntado
+        allowance[_from][msg.sender] -= _value;             // Subtraer de la permisión del remitente
+        totalSupply -= _value;                              // Actualizar totalSuply
+        Burn(_from, _value);
+        return true;
+    }
+}
